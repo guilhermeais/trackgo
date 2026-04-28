@@ -112,7 +112,7 @@ func loadConfig() seedConfig {
 	return seedConfig{
 		NumberOfCarriers: getEnvInt("NUMBER_OF_CARRIERS", 5),
 		TrucksPerCarrier: getEnvInt("TRUCKS_PER_CARRIER", 10),
-		MongoURI:         getEnvString("MONGO_URI", "mongodb://localhost:27017"),
+		MongoURI:         getEnvString("MONGO_URI", "mongodb://localhost:27017/?replicaSet=rs0&directConnection=true"),
 		Database:         getEnvString("MONGO_DB", "trackgo"),
 		Collection:       getEnvString("MONGO_COLLECTION", "truck-drivers"),
 	}

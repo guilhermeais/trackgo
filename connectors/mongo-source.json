@@ -1,0 +1,20 @@
+{
+  "name": "mongo-source-truck-drivers-v10",
+  "config": {
+    "connector.class": "com.mongodb.kafka.connect.MongoSourceConnector",
+    "startup.mode": "copy_existing",
+    "tasks.max": "1",
+    "connection.uri": "mongodb://mongodb:27017/?replicaSet=rs0",
+    "database": "trackgo",
+    "collection": "truck-drivers",
+    "topic.prefix": "mongo",
+    "publish.full.document.only": "true",
+
+    "output.format.key": "json",
+    "output.format.value": "json",
+
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.storage.StringConverter"
+  }
+}
