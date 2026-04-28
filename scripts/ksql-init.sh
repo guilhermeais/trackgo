@@ -24,7 +24,7 @@ curl -X POST -H "Content-Type: application/json" --data @/connectors/mongo-sourc
 echo "Creating KSQL stream/table..."
 curl -X POST \
   -H "Content-Type: application/vnd.ksql.v1+json; charset=utf-8" \
-  --data @/ksql/init.json \
+  --data "$(jq -n --rawfile sql /ksql/schemas.sql '{ksql: $sql, streamsProperties: {}}')" \
   http://ksqldb-server:8088/ksql
 
 echo "KSQL init completed."

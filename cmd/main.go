@@ -167,12 +167,10 @@ func main() {
 	numberOfCarriers := config.NumberOfCarriers
 	truckPerCarrier := config.TrucksPerCarrier
 
-	// Initialize the GPS data generator with the specified number of carriers and trucks per carrier
 	generator := NewGPSDataGenerator(numberOfCarriers, truckPerCarrier)
 
 	gpsChannel := make(chan GPSPayload)
 
-	// Start the GPS data generator
 	go generator.Start(ctx, gpsChannel)
 
 	for gpsPayload := range gpsChannel {
@@ -233,10 +231,10 @@ func (g *GPSDataGenerator) Start(ctx context.Context, gpsChannel chan<- GPSPaylo
 		case <-ticker.C:
 			for carrierId := 1; carrierId <= g.numberOfCarriers; carrierId++ {
 				for truckId := 1; truckId <= g.trucksPerCarrier; truckId++ {
-					routeKey := fmt.Sprintf("Carrier%d-Truck%d", carrierId, truckId)
-					position := g.routes[routeKey].GetNextPosition()
+					truckId := fmt.Sprintf("Carrier%d-Truck%d", carrierId, truckId)
+					position := g.routes[truckId].GetNextPosition()
 					gpsData := GPSPayload{
-						TruckId:   "Truck" + strconv.Itoa(truckId),
+						TruckId:   truckId,
 						CarrierId: "Carrier" + strconv.Itoa(carrierId),
 						Latitude:  position.Latitude,
 						Longitude: position.Longitude,
@@ -245,7 +243,7 @@ func (g *GPSDataGenerator) Start(ctx context.Context, gpsChannel chan<- GPSPaylo
 
 					select {
 					case gpsChannel <- gpsData:
-						fmt.Printf("Generated GPS data for %s: %.6f, %.6f\n", routeKey, position.Latitude, position.Longitude)
+						fmt.Printf("Generated GPS data for %s: %.6f, %.6f\n", truckId, position.Latitude, position.Longitude)
 					case <-ctx.Done():
 						close(gpsChannel)
 						return

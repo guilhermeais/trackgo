@@ -1,4 +1,0 @@
-{
-  "ksql": "DROP TABLE IF EXISTS drivers_table DELETE TOPIC;\nDROP STREAM IF EXISTS truck_drivers DELETE TOPIC;\nDROP STREAM IF EXISTS truck_drivers_raw;\n\nSET 'auto.offset.reset' = 'earliest';\n\nCREATE STREAM truck_drivers_raw (\n  truckId VARCHAR,\n  carrierId VARCHAR,\n  driver STRUCT<name VARCHAR, license VARCHAR>\n)\nWITH (\n  KAFKA_TOPIC = 'mongo.trackgo.truck-drivers',\n  VALUE_FORMAT = 'JSON'\n);\n\nCREATE STREAM truck_drivers\nWITH (KAFKA_TOPIC = 'truck-drivers-keyed', VALUE_FORMAT = 'JSON')\nAS SELECT\n  truckId,\n  carrierId,\n  driver\nFROM truck_drivers_raw\nPARTITION BY truckId;\n\nCREATE TABLE drivers_table AS\n  SELECT\n    truckId as truckId,\n    LATEST_BY_OFFSET(carrierId) AS carrierId,\n    LATEST_BY_OFFSET(driver) AS driver\n  FROM truck_drivers\n  GROUP BY truckId\n  EMIT CHANGES;",
-  "streamsProperties": {}
-}

@@ -168,7 +168,9 @@ services:
       start_period: 30s
 
   ksqldb-init:
-    image: curlimages/curl:8.19.0
+    build:
+      context: .
+      dockerfile: ksqldb-init.Dockerfile
     depends_on:
       kafka-connect:
         condition: service_healthy
