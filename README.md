@@ -7,17 +7,8 @@ A Go application that simulates GPS data for truck fleets moving between Brazili
 **Option 1: Manual setup**
 ```bash
 docker-compose up -d
-# Wait 30 seconds for Kafka to start
+# Wait for Kafka to start
 go run cmd/main.go
-```
-
-**Option 2: Automated setup**
-```bash
-# Linux/Mac
-./setup.sh
-
-# Windows
-setup.bat
 ```
 
 **Monitor and manage:**

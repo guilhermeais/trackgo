@@ -1,0 +1,16 @@
+{
+  "schemaName": "truck_gps_data",
+  "dimensionFieldSpecs": [
+    { "name": "TRUCKID", "dataType": "STRING" },
+    { "name": "CARRIERID", "dataType": "STRING" },
+    { "name": "DRIVER", "dataType": "JSON" },
+    { "name": "LATITUDE", "dataType": "DOUBLE" },
+    { "name": "LONGITUDE", "dataType": "DOUBLE" }
+  ],
+  "dateTimeFieldSpecs": [{
+    "name": "DATE",
+    "dataType": "TIMESTAMP",
+    "format": "1:MILLISECONDS:ISO_8601",
+    "granularity": "1:MILLISECONDS"
+  }]
+}

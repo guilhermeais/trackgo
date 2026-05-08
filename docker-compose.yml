@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   zookeeper:
@@ -13,49 +13,52 @@ services:
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
       - zookeeper_logs:/var/lib/zookeeper/log
-
-  kafka:
-    image: confluentinc/cp-kafka:7.4.0
-    hostname: kafka
-    container_name: kafka
-    depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
-      - "9101:9101"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_JMX_PORT: 9101
-      KAFKA_JMX_HOSTNAME: localhost
-    volumes:
-      - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
 
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --node-id=0
+      - --kafka-addr=PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:29092,OUTSIDE://redpanda:9092
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
     depends_on:
-      kafka:
+      redpanda:
         condition: service_healthy
     ports:
       - "8080:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: redpanda:29092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
@@ -112,20 +115,49 @@ services:
       retries: 5
       start_period: 30s
 
+  run-go-seeder:
+    image: golang:1.26
+    container_name: run-go-seeder
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGO_URI: "mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true"
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: ["go", "run", "cmd/seed/main.go"]
+    restart: "no"
+
+  run-go-producer:
+    image: golang:1.26
+    container_name: run-go-producer
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      KAFKA_SERVERS: "redpanda:9092"
+      KAFKA_TOPIC: "raw-gps-data"
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: ["go", "run", "cmd/main.go"]
+    restart: "no"
+
   kafka-connect:
     build:
       context: .
       dockerfile: connect.Dockerfile
     container_name: kafka-connect
     depends_on:
-      kafka:
+      redpanda:
         condition: service_healthy
       mongodb:
         condition: service_healthy
     ports:
       - "8083:8083"
     environment:
-      CONNECT_BOOTSTRAP_SERVERS: kafka:29092
+      CONNECT_BOOTSTRAP_SERVERS: redpanda:29092
       CONNECT_REST_PORT: 8083
       CONNECT_REST_ADVERTISED_HOST_NAME: localhost
       CONNECT_REST_ADVERTISED_PORT: 8083
@@ -147,17 +179,18 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    restart: unless-stopped
 
   ksqldb-server:
     image: confluentinc/ksqldb-server:0.29.0
     container_name: ksqldb-server
     depends_on:
-      kafka:
+      redpanda:
         condition: service_healthy
     ports:
       - "8088:8088"
     environment:
-      KSQL_BOOTSTRAP_SERVERS: kafka:29092
+      KSQL_BOOTSTRAP_SERVERS: redpanda:29092
       KSQL_LISTENERS: http://0.0.0.0:8088
       KSQL_KSQL_SCHEMA_REGISTRY_URL: ""
     healthcheck:
@@ -166,25 +199,102 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    restart: unless-stopped
 
-  ksqldb-init:
+  kafka-connect-setup:
     build:
       context: .
-      dockerfile: ksqldb-init.Dockerfile
+      dockerfile: alpine.Dockerfile
     depends_on:
       kafka-connect:
         condition: service_healthy
-      ksqldb-server:
-        condition: service_started
+      run-go-seeder:
+        condition: service_completed_successfully
     volumes:
       - ./connectors:/connectors:ro
+      - ./scripts:/scripts:ro
+    entrypoint: ["/bin/sh", "/scripts/kafka-connect-init.sh"]
+    restart: "no"
+
+  wait-for-mongo-cdc-topic:
+    build:
+      context: .
+      dockerfile: alpine.Dockerfile
+    container_name: wait-for-mongo-cdc-topic
+    depends_on:
+      kafka-connect:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+     "echo 'Waiting for MongoDB CDC topic via REST API...';
+     until curl -s http://redpanda:8082/topics | grep -q '\"mongo.trackgo.truck-drivers\"'; do
+        echo 'Topic not found yet... retrying';
+        sleep 2;
+      done;
+      echo 'MongoDB CDC topic is ready!';
+      "
+    restart: "no"
+
+  ksql-streams-setup:
+    build:
+      context: .
+      dockerfile: alpine.Dockerfile
+    depends_on:
+      ksqldb-server:
+        condition: service_healthy
+      wait-for-mongo-cdc-topic:
+        condition: service_completed_successfully
+    volumes:
       - ./ksql:/ksql:ro
       - ./scripts:/scripts:ro
-    entrypoint: ["/bin/sh", "/scripts/ksql-init.sh"]
+    entrypoint: ["/bin/sh", "/scripts/ksql-streams-init.sh"]
     restart: "no"
+    
+  pinot:
+    image: apachepinot/pinot:latest
+    container_name: pinot
+    command: "QuickStart -type batch"
+    restart: unless-stopped
+    ports:
+      - "9000:9000" # UI e Controller
+      - "8099:8099" # Broker (Consultas)
+      - "8000:8000" # Query Console
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  pinot-setup:
+    image: apachepinot/pinot:latest
+    container_name: pinot-setup
+    volumes:
+      - ./pinot:/config
+    depends_on:
+      pinot:
+        condition: service_healthy
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        echo 'Waiting for Pinot Controller...'
+        until curl -s http://pinot:9000/health; do
+        sleep 2
+        done
+        bin/pinot-admin.sh AddTable \
+        -schemaFile /config/schemas/truck_gps_schema.json \
+        -tableConfigFile /config/tables/truck_gps_table.json \
+        -controllerHost pinot \
+        -controllerPort 9000 \
+        -exec
 
 volumes:
   zookeeper_data:
   zookeeper_logs:
   kafka_data:
+  redpanda_data:
   mongodb_data:

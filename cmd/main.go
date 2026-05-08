@@ -57,7 +57,7 @@ type GPSPayload struct {
 }
 
 const DEFAULT_NUMBER_OF_CARRIERS = 5
-const DEFAULT_TRUCKS_PER_CARRIER = 10
+const DEFAULT_TRUCKS_PER_CARRIER = 5
 const DEFAULT_KAFKA_SERVERS = "localhost:9092"
 const DEFAULT_KAFKA_TOPIC = "raw-gps-data"
 
@@ -140,6 +140,7 @@ func main() {
 	fmt.Printf("  Trucks per carrier: %d\n", config.TrucksPerCarrier)
 	fmt.Printf("  Kafka servers: %s\n", config.KafkaServers)
 	fmt.Printf("  Kafka topic: %s\n", config.KafkaTopic)
+	fmt.Printf("Kafka servers: %s\n", config.KafkaServers)
 	fmt.Println()
 
 	p, err := kafka.NewProducer(&kafka.ConfigMap{

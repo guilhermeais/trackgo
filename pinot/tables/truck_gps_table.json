@@ -1,0 +1,33 @@
+{
+  "tableName": "truck_gps_data",
+  "tableType": "REALTIME",
+  "tenants": { "broker": "DefaultTenant", "server": "DefaultTenant" },
+  "segmentsConfig": {
+    "timeColumnName": "DATE",
+    "schemaName": "truck_gps_data",
+    "replication": "1",
+    "replicasPerPartition": "1"
+  },
+  "tableIndexConfig": {
+    "loadMode": "MMAP",
+    "streamConfigs": {
+      "streamType": "kafka",
+      "stream.kafka.topic.name": "enriched-gps-data",
+      "stream.kafka.broker.list": "redpanda:9092",
+      "stream.kafka.consumer.type": "lowlevel",
+      "stream.kafka.decoder.class.name": "org.apache.pinot.plugin.inputformat.json.JSONMessageDecoder",
+      "stream.kafka.consumer.factory.class.name": "org.apache.pinot.plugin.stream.kafka20.KafkaConsumerFactory",
+      "stream.kafka.consumer.prop.auto.offset.reset": "smallest",
+      "stream.kafka.isolation.level": "read_uncommitted",
+      "stream.kafka.fetch.timeout.ms": "30000"
+    }
+  },
+  "ingestionConfig": {
+    "transformConfigs": [
+      {
+        "columnName": "TRUCKID",
+        "transformFunction": "__key"
+      }
+    ]
+  }
+}
